@@ -1,8 +1,8 @@
 from confluent_kafka import Consumer, KafkaError
 from multiprocessing import Process, cpu_count
 from clickhouse_driver import Client
+from dateutil import parser
 import json
-import time
 
 # Consumer Config
 
@@ -22,15 +22,16 @@ CLICKHOUSE_CONFIG = {
     "password": "1234",
 }
 
-consumer = Consumer(conf)
-consumer.subscribe(['telemetry.events'])
+
 
 #   source_id String CODEC(ZSTD(19)),
 #   metric String,
 #   value Float64,
 #   event_time DateTime64(3)
 
-def insert_data_to_clickhouse(worker_id):
+def clickhouse_worker(worker_id):
+    consumer = Consumer(conf)
+    consumer.subscribe(['telemetry.events'])
     client = Client(**CLICKHOUSE_CONFIG)
 
     insert_sql = """ 
@@ -48,22 +49,19 @@ def insert_data_to_clickhouse(worker_id):
         while True:
             msg = consumer.poll(timeout=1.0)
             if msg is None:
-                print(msg)
                 continue
 
             if msg.error():
-
                 if msg.error().code() != KafkaError._PARTITION_EOF:
                     print(f'Error: {msg.error()}')
                 continue
             data = json.loads(msg.value().decode('utf-8'))
-            data_list = list(data.values())
-            print(f"Processing: {data_list}")
-            row = (tx_id, *data_list)
+            data['event_time'] = parser.isoparse(data['event_time'])
+            print(f"Processing: {data}")
+            row = (tx_id, data['source_id'], data['metric'], data['value'], data['event_time'])
             client.execute(insert_sql,[row])
             tx_id+=1
             consumer.commit(asynchronous=False)
-            time.sleep(1)
 
     except KeyboardInterrupt:
         print("Shutting down...")
@@ -78,7 +76,7 @@ if __name__ == "__main__":
 
     processes = []
     for i in range(workers):
-        p = Process(target=insert_data_to_clickhouse, args=(i,))
+        p = Process(target=clickhouse_worker, args=(i,))
         p.start()
         processes.append(p)
 
