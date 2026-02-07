@@ -1,0 +1,15 @@
+# Environments
+venv/
+.env
+
+# Editor Settings
+.vscode/
+.idea/
+
+# Specific Scripts
+consumer2.py
+
+# Python Bytecode (Standard practice)
+__pycache__/
+*.py[cod]
+*$py.class
