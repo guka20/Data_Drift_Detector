@@ -46,11 +46,11 @@ for idx, row in df.iterrows():
         if events_sent % 5000 == 0:
             producer.flush()
             progress = (events_sent / len(df)) * 100
-            print(f"📤 Sent {events_sent:,} / {len(df):,} events ({progress:.1f}%)")
+            print(f"Sent {events_sent:,} / {len(df):,} events ({progress:.1f}%)")
         
     except Exception as e:
         failed += 1
         if failed < 10: 
-            print(f"⚠️  Error processing row {idx}: {e}")
+            print(f"Error processing row {idx}: {e}")
 
 producer.flush()
