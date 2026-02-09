@@ -5,6 +5,7 @@ from dateutil import parser
 import json
 import signal
 import sys
+import time
 
 # Consumer Config
 KAFKA_CONFIG = {
@@ -40,7 +41,7 @@ def clickhouse_worker(worker_id):
     client = Client(**CLICKHOUSE_CONFIG)
 
     insert_sql = """
-        INSERT INTO telemetry_raw_events (
+        INSERT INTO raw_events (
             event_id,
             source_id,
             metric,
@@ -50,7 +51,6 @@ def clickhouse_worker(worker_id):
     """
     
     # Use timestamp-based IDs to avoid collisions
-    import time
     tx_id = int(time.time() * 1_000_000) * 1000 + worker_id * 100_000_000_000
     
     rows = []

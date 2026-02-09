@@ -1,55 +1,64 @@
-import random
-import json
-import time
-from datetime import datetime, timezone
+import pandas as pd
 from confluent_kafka import Producer
+import json
+from datetime import datetime
 
-# Kafka configuration
-conf = {
-    'bootstrap.servers': 'localhost:9092',  # your Kafka broker address and port
-    'client.id': 'data-drift-producer',
-    'acks': 'all',
-    'retries': 3,
-    'linger.ms': 100,
-    'compression.type': 'snappy',
-}
-
+# Kafka config
+conf = {'bootstrap.servers': '127.0.0.1:9092'}
 producer = Producer(conf)
 
-TOPIC = 'telemetry.events'
-METRICS = ['cpu_usage', 'memory_usage', 'request_latency']
-SOURCE_IDS = [f'device_{i}' for i in range(1, 6)]  # Example devices
+# Load dataset
+print("📁 Loading IoT temperature dataset...")
+df = pd.read_csv('./dataset/IOT-temp.csv')
 
-def delivery_callback(err, msg):
-    if err:
-        print(f'Message delivery failed: {err}')
-    else:
-        print(f'Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}')
+print(f"📊 Loaded {len(df)} records")
+print(f"📅 Date range: {df['noted_date'].min()} to {df['noted_date'].max()}")
 
-def generate_event():
-    return {
-        "source_id": random.choice(SOURCE_IDS),
-        "metric": random.choice(METRICS),
-        "value": round(random.uniform(0, 100), 2),
-        "event_time": datetime.now(timezone.utc).isoformat()
-    }
+# Clean and prepare data
+events_sent = 0
+failed = 0
 
-try:
-    count = 0
-    while True:
-        event = generate_event()
-        producer.produce(
-            topic=TOPIC,
-            value=json.dumps(event).encode('utf-8'),
-            callback=delivery_callback
-        )
-        producer.poll(0) 
-        count = count + 1
-        if(count%10000 == 0):
-            
-            print('${count} Data Saved')
-       
-except KeyboardInterrupt:
-    print("Stopping producer...")
-finally:
-    producer.flush()
+print("🔄 Transforming and sending to Kafka...")
+
+for idx, row in df.iterrows():
+    try:
+        # Parse timestamp (format: "08-12-2018 09:30")
+        timestamp = datetime.strptime(row['noted_date'], '%d-%m-%Y %H:%M')
+        
+        # Create source_id based on indoor/outdoor
+        location = row['out/in'].strip().lower()
+        source_id = f"room_admin_{location}door"  # "room_admin_indoor" or "room_admin_outdoor"
+        
+        # Create event
+        event = {
+            "source_id": source_id,
+            "metric": "temperature",
+            "value": float(row['temp']),
+            "event_time": timestamp.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        }
+        
+        # Send to Kafka
+        producer.produce('telemetry.events', json.dumps(event).encode('utf-8'))
+        events_sent += 1
+        
+        # Flush periodically
+        if events_sent % 5000 == 0:
+            producer.flush()
+            progress = (events_sent / len(df)) * 100
+            print(f"📤 Sent {events_sent:,} / {len(df):,} events ({progress:.1f}%)")
+        
+    except Exception as e:
+        failed += 1
+        if failed < 10:  # Only print first 10 errors
+            print(f"⚠️  Error processing row {idx}: {e}")
+
+# Final flush
+producer.flush()
+
+print(f"\n✅ Complete!")
+print(f"📊 Total events sent: {events_sent:,}")
+print(f"❌ Failed: {failed}")
+print(f"\n📋 Next steps:")
+print("1. Run: python3 kafka_to_clickhouse.py (to ingest to ClickHouse)")
+print("2. Run: python3 compute_baseline.py")
+print("3. Run: python3 drift_detector.py")

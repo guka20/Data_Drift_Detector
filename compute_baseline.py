@@ -10,27 +10,20 @@ CLICKHOUSE_CONFIG = {
     "password": "1234",
 }
 
-BASELINE_WINDOW_HOURS = 24  
-MIN_SAMPLES = 100  
+# Not used anymore - we use fixed dates
+# BASELINE_WINDOW_HOURS = 24  
+MIN_SAMPLES = 10 
 
 def compute_baseline():
     client = Client(**CLICKHOUSE_CONFIG)
     
     print("📊 Computing baseline statistics...")
     
-    result = client.execute("SELECT max(event_time) FROM raw_events")
-    latest_event_time = result[0][0]
+    # Use FIXED baseline window (first 60 days - before drift starts)
+    window_start = datetime(2024, 1, 1, 0, 0, 0)
+    window_end = datetime(2024, 3, 1, 0, 0, 0)  # Day 60
     
-    if not latest_event_time:
-        print("❌ No data found in raw_events table")
-        return
-    
-    print(f"Latest event time: {latest_event_time}")
-    
-    window_end = latest_event_time
-    window_start = window_end - timedelta(hours=BASELINE_WINDOW_HOURS)
-    
-    print(f"Baseline window: {window_start} to {window_end}")
+    print(f"Baseline window: {window_start} to {window_end} (Days 1-60: Normal period)")
     
     query = """
         SELECT
