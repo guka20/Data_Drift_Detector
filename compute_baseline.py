@@ -2,6 +2,7 @@ from clickhouse_driver import Client
 from datetime import datetime, timedelta
 import sys
 
+# Clickhouse-ის კონფიგურაცია
 CLICKHOUSE_CONFIG = {
     "host": "localhost",
     "port": 9000,
@@ -10,16 +11,16 @@ CLICKHOUSE_CONFIG = {
     "password": "1234",
 }
 
-# Not used anymore - we use fixed dates
-# BASELINE_WINDOW_HOURS = 24  
+
 MIN_SAMPLES = 10 
 
 def compute_baseline():
     client = Client(**CLICKHOUSE_CONFIG)
     
-    print("📊 Computing baseline statistics...")
+    print("Computing baseline statistics...")
     
-    # Use FIXED baseline window (first 60 days - before drift starts)
+    # baseline სტატიკისთვის ვიყენებთ პირველ 60 დღეს
+    # რადგან ეს არის პერიოდი როცა მონაცემები ნორმალურია
     window_start = datetime(2024, 1, 1, 0, 0, 0)
     window_end = datetime(2024, 3, 1, 0, 0, 0)  # Day 60
     
@@ -42,7 +43,7 @@ def compute_baseline():
         HAVING sample_count >= %(min_samples)s
     """
     
-    print("🔄 Calculating statistics...")
+    print("Calculating statistics...")
     
     results = client.execute(
         query,
@@ -54,10 +55,10 @@ def compute_baseline():
     )
     
     if not results:
-        print("❌ No valid baseline data (not enough samples)")
+        print("No valid baseline data (not enough samples)")
         return
     
-    print(f"✅ Computed baseline for {len(results)} (source_id, metric) pairs")
+    print(f"Computed baseline for {len(results)} (source_id, metric) pairs")
     
     insert_query = """
         INSERT INTO baseline_statistics (
@@ -72,12 +73,12 @@ def compute_baseline():
         ) VALUES
     """
     
-    print("💾 Inserting into baseline_statistics table...")
+    print("Inserting into baseline_statistics table...")
     client.execute(insert_query, results)
     
-    print(f"✅ Successfully inserted {len(results)} baseline records")
+    print(f"Successfully inserted {len(results)} baseline records")
     
-    print("\n📋 Sample baseline statistics:")
+    print("\nSample baseline statistics:")
     print("-" * 80)
     print(f"{'Source ID':<20} {'Metric':<20} {'Mean':<12} {'StdDev':<12} {'Samples':<10}")
     print("-" * 80)
@@ -90,13 +91,13 @@ def compute_baseline():
         print(f"... and {len(results) - 10} more")
     
     print("\n" + "=" * 80)
-    print("🎉 Baseline computation complete!")
+    print("Baseline computation complete!")
 
 if __name__ == "__main__":
     try:
         compute_baseline()
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
